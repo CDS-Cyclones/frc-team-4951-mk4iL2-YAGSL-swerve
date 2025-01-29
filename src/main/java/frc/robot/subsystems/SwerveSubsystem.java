@@ -6,12 +6,15 @@ package frc.robot.subsystems;
 
 import java.io.File;
 import java.util.function.DoubleSupplier;
+import java.util.Optional;
 
 import com.pathplanner.lib.auto.AutoBuilder;
 import com.pathplanner.lib.config.PIDConstants;
 import com.pathplanner.lib.config.RobotConfig;
 import com.pathplanner.lib.controllers.PPHolonomicDriveController;
 
+import edu.wpi.first.apriltag.AprilTagFieldLayout;
+import edu.wpi.first.apriltag.AprilTagFields;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
@@ -23,9 +26,9 @@ import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
-import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Config;
 import frc.robot.Constants;
+import frc.robot.subsystems.Vision.Cameras;
 import swervelib.SwerveController;
 import swervelib.SwerveDrive;
 import swervelib.math.SwerveMath;
@@ -34,14 +37,23 @@ import swervelib.parser.SwerveDriveConfiguration;
 import swervelib.parser.SwerveParser;
 import swervelib.telemetry.SwerveDriveTelemetry;
 import swervelib.telemetry.SwerveDriveTelemetry.TelemetryVerbosity;
+import org.photonvision.targeting.PhotonPipelineResult;
+
 
 public class SwerveSubsystem extends SubsystemBase {
-  private final SwerveDrive swerveDrive;
+  /** Swerve drive object */
+  private final SwerveDrive  swerveDrive;
+  /** AprilTag field layout */
+  private final AprilTagFieldLayout aprilTagFieldLayout = AprilTagFieldLayout.loadField(AprilTagFields.k2025Reefscape);
+  /** Enable vision odometry updates while driving */
+  private final boolean visionBasedOdometry = true;
+  /** PhotonVision class to keep an accurate odometry */
+  private final Vision vision;
 
   // Load the RobotConfig from the GUI settings.
   private final RobotConfig PPconfig;
 
-  /** 
+  /**
    * Creates a new SwerveSubsystem.
    */
   public SwerveSubsystem() {
@@ -71,6 +83,15 @@ public class SwerveSubsystem extends SubsystemBase {
     // Set motors to brake mode
     setMotorBrake(true);
 
+    if (visionBasedOdometry)
+    {
+      // Intialize PhotonVision
+      vision = new Vision(swerveDrive::getPose, swerveDrive.field);
+
+      // Stop the odometry thread if we are using vision that way we can synchronize updates better.
+      swerveDrive.stopOdometryThread();
+    }
+
     try
     {
       // Load PathPlanner config
@@ -83,7 +104,7 @@ public class SwerveSubsystem extends SubsystemBase {
         this::getRobotVelocity, // ChassisSpeeds supplier. MUST BE ROBOT RELATIVE
         (speeds, feedforwards) -> swerveDrive.drive(speeds, swerveDrive.kinematics.toSwerveModuleStates(speeds), feedforwards.linearForces()), // Method that will drive the robot given ROBOT RELATIVE ChassisSpeeds. Also optionally outputs individual module feedforwards
         new PPHolonomicDriveController( // PPHolonomicController is the built in path following controller for holonomic drive trains
-          // Translation PID constants  
+          // Translation PID constants
           new PIDConstants(
             swerveDrive.swerveDriveConfiguration.modules[0].getDrivePIDF().p,
             swerveDrive.swerveDriveConfiguration.modules[0].getDrivePIDF().i,
@@ -110,7 +131,7 @@ public class SwerveSubsystem extends SubsystemBase {
           return false;
         },
         this // Reference to this subsystem to set requirements
-);
+      );
     } catch (Exception e)
     {
       throw new RuntimeException(e);
@@ -120,10 +141,15 @@ public class SwerveSubsystem extends SubsystemBase {
 
   @Override
   public void periodic() {
-    // This method will be called once per scheduler run
+    // When vision is enabled we must manually update odometry in SwerveDrive
+    if (visionBasedOdometry)
+    {
+      swerveDrive.updateOdometry();
+      vision.updatePoseEstimation(swerveDrive);
+    }
   }
 
-  
+
   /**
    * Command to drive the robot using translative values and heading as angular velocity.
    *
@@ -146,6 +172,17 @@ public class SwerveSubsystem extends SubsystemBase {
         fieldRelative,
         openLoop);
     });
+  }
+
+
+  /**
+   * Drive according to the chassis robot oriented velocity.
+   *
+   * @param velocity Robot oriented {@link ChassisSpeeds}
+   */
+  public void drive(ChassisSpeeds velocity)
+  {
+    swerveDrive.drive(velocity);
   }
 
 
@@ -229,7 +266,7 @@ public class SwerveSubsystem extends SubsystemBase {
 
   /**
    * This will zero (calibrate) the robot to assume the current position is facing forward
-   * 
+   *
    * If red alliance rotate the robot 180 after the drivebase zero command
    */
   public void zeroGyroWithAlliance()
@@ -285,7 +322,7 @@ public class SwerveSubsystem extends SubsystemBase {
     return swerveDrive.swerveController.getTargetSpeeds(scaledInputs.getX(), scaledInputs.getY(), headingX, headingY, getHeading().getRadians(), Constants.MAX_SPEED);
   }
 
-  
+
   /**
    * Get the chassis speeds based on controller input of 1 joystick and one angle. Control the robot at an offset of
    * 90deg.
@@ -402,5 +439,27 @@ public class SwerveSubsystem extends SubsystemBase {
             new Config(),
             this, swerveDrive),
         3.0, 5.0, 3.0);
+  }
+
+
+  /**
+   * Aim the robot at the target returned by PhotonVision.
+   *
+   * @return A {@link Command} which will run the alignment.
+   */
+  public Command aimAtTarget(Cameras camera)
+  {
+
+    return run(() -> {
+      Optional<PhotonPipelineResult> resultO = camera.getBestResult();
+      if (resultO.isPresent())
+      {
+        var result = resultO.get();
+        if (result.hasTargets())
+        {
+          drive(getTargetSpeeds(0, 0, Rotation2d.fromDegrees(result.getBestTarget().getYaw()))); // Not sure if this will work, more math may be required.
+        }
+      }
+    });
   }
 }
