@@ -22,9 +22,11 @@ import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
 import edu.wpi.first.math.trajectory.Trajectory;
+import edu.wpi.first.util.sendable.Sendable;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
@@ -151,17 +153,21 @@ public class SwerveSubsystem extends SubsystemBase {
       vision.updatePoseEstimation(swerveDrive);
     }
 
-    List<PhotonPipelineResult> pipelineResults = Cameras.CAM1.camera.getAllUnreadResults();
-    if(!pipelineResults.isEmpty()) {
-      PhotonPipelineResult LatestResult = pipelineResults.get(pipelineResults.size() - 1);
-      PhotonTrackedTarget LatestBestTarget = LatestResult.getBestTarget();
-      SmartDashboard.putNumber("April Tag ID", LatestBestTarget.getFiducialId());
-      SmartDashboard.putNumber("Area of Tag", LatestBestTarget.getArea());
-      SmartDashboard.putNumber("Photon Yaw", LatestBestTarget.getYaw());
-      SmartDashboard.putNumber("Photon Pitch", LatestBestTarget.getPitch());
-    }else{
-      SmartDashboard.putNumber("April Tag ID", -1);
+    try {
+      List<PhotonPipelineResult> pipelineResults = Cameras.CAM1.camera.getAllUnreadResults();
+      if(!pipelineResults.isEmpty()) {
+        PhotonPipelineResult LatestResult = pipelineResults.get(pipelineResults.size() - 1);
+        PhotonTrackedTarget LatestBestTarget = LatestResult.getBestTarget();
+        Shuffleboard.getTab("April Tag ID").add("Latest Result", String.valueOf(LatestBestTarget.getFiducialId()), "-1");
+        Shuffleboard.getTab("Area of Tag").add("Latest Result", String.valueOf(LatestBestTarget.getArea()));
+        Shuffleboard.getTab("Photon Yaw").add("Latest Result", String.valueOf(LatestBestTarget.getYaw()));
+        Shuffleboard.getTab("Photon Pitch").add("Latest Result", String.valueOf(LatestBestTarget.getPitch()));
+      }else{
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
     }
+
   }
 
 
@@ -466,6 +472,7 @@ public class SwerveSubsystem extends SubsystemBase {
   {
 
     return run(() -> {
+
       Optional<PhotonPipelineResult> resultO = camera.getBestResult();
       if (resultO.isPresent())
       {
