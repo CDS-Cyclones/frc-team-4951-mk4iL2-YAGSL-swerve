@@ -15,6 +15,7 @@ import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 import frc.robot.Constants.DriverJoystickConstants;
 import frc.robot.subsystems.SwerveSubsystem;
+import frc.robot.subsystems.Vision;
 
 public class RobotContainer {
   private final SwerveSubsystem m_Swerve;
@@ -22,7 +23,6 @@ public class RobotContainer {
   private final CommandXboxController m_DriverController;
 
   private final SendableChooser<Command> autoChooser;
-
 
 
   public RobotContainer() {
@@ -57,12 +57,15 @@ public class RobotContainer {
   }
 
   private void configureBindings() {
-    m_DriverController.a().onTrue((Commands.runOnce(m_Swerve::zeroGyro)));
+    m_DriverController.a().onTrue(Commands.runOnce(m_Swerve::zeroGyro));
 
     // SysId Routines for Swerve
     // m_DriverController.x().onTrue(m_Swerve.sysIdDriveMotorCommand());
     // m_DriverController.b().onTrue(m_Swerve.sysIdAngleMotorCommand());
+
+    m_DriverController.y().onTrue(m_Swerve.aimAtTarget(Vision.Cameras.CAM1));
   }
+
 
   public Command getAutonomousCommand() {
     return autoChooser.getSelected();
