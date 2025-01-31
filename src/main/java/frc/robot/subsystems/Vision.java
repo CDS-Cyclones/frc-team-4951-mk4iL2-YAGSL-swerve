@@ -180,9 +180,9 @@ public class Vision {
     /**
      * Camera Enum to select each camera
      */
-    enum Cameras
+    public enum Cameras
     {
-        CAM("center",
+        CAM1("cds_cam1",
                 new Rotation3d(0, 0, 0),
                 new Translation3d(Units.inchesToMeters(-4.628),
                         Units.inchesToMeters(-10.687),
