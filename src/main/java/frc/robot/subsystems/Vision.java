@@ -192,15 +192,15 @@ public class Vision {
         /**
          * Latency alert to use when high latency is detected.
          */
-        public final  Alert latencyAlert;
+        public final Alert latencyAlert;
         /**
          * Camera instance for comms.
          */
-        public final  PhotonCamera camera;
+        public final PhotonCamera camera;
         /**
          * Pose estimator for camera.
          */
-        public final  PhotonPoseEstimator poseEstimator;
+        public final PhotonPoseEstimator poseEstimator;
         /**
          * Standard Deviation for single tag readings for pose estimation.
          */
@@ -221,10 +221,6 @@ public class Vision {
          * Estimated robot pose.
          */
         public Optional<EstimatedRobotPose> estimatedRobotPose;
-        /**
-         * Simulated camera instance which only exists during simulations.
-         */
-        public PhotonCameraSim cameraSim;
         /**
          * Results list to be updated periodically and cached to avoid unnecessary queries.
          */
@@ -315,7 +311,7 @@ public class Vision {
                 mostRecentTimestamp = Math.max(mostRecentTimestamp, result.getTimestampSeconds());
             }
             if ((resultsList.isEmpty() || (currentTimestamp - mostRecentTimestamp >= debounceTime)) && (currentTimestamp - lastReadTimestamp) >= debounceTime) {
-                resultsList = Robot.isReal() ? camera.getAllUnreadResults() : cameraSim.getCamera().getAllUnreadResults();
+                resultsList = camera.getAllUnreadResults();
                 lastReadTimestamp = currentTimestamp;
                 resultsList.sort((PhotonPipelineResult a, PhotonPipelineResult b) -> {
                     return a.getTimestampSeconds() >= b.getTimestampSeconds() ? 1 : -1;
